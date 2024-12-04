@@ -1,0 +1,23 @@
+{
+  "pluginAlias": "homebridge-panda-pwr",
+  "pluginType": "platform",
+  "singular": true,
+  "strictValidation": false,
+  "schema": {
+    "type": "object",
+    "properties": {
+      "panda-pwr-ip": {
+        "title": "Panda Pwr IP",
+        "type": "string",
+        "required": true,
+        "default": ""
+      },
+      "interval": {
+        "title": "Interval for fetching data (in sec)",
+        "type": "number",
+        "required": true,
+        "default": 6
+      }
+    }
+  }
+}
