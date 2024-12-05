@@ -19,6 +19,7 @@ export class PandaPwrPlatformAccessory {
       private readonly platform: PandaPwrPlatform,
       private readonly accessory: PlatformAccessory,
   ) {
+    accessory.context.device.ip = '192.168.68.168';
     this.lastExecutionTime = 0;
     this.pandaUrl = `http://${accessory.context.device.ip}`;
     this.pandaSetUrl = `${this.pandaUrl}/set`;
