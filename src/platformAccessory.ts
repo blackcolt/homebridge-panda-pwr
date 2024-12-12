@@ -1,5 +1,5 @@
 import { CharacteristicValue, PlatformAccessory, Service } from 'homebridge';
-import { normalizePowerData, normalizeVoltageData } from './utils/utils';
+import { normalizePowerData, normalizeVoltageData } from './utils/utils.js';
 import type { PandaPwrPlatform } from './platform.js';
 
 export class PandaPwrPlatformAccessory {
