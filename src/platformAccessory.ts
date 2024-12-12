@@ -4,6 +4,7 @@ import type { PandaPwrPlatform } from './platform.js';
 
 export class PandaPwrPlatformAccessory {
   private readonly pandaGetStateUrl: string;
+  private readonly pandaUpdateUrl: string;
   private readonly pandaSetUrl: string;
   private lastExecutionTime: number;
   private readonly pandaUrl: string;
@@ -24,7 +25,7 @@ export class PandaPwrPlatformAccessory {
     this.pandaUrl = `http://${accessory.context.device.ip}`;
     this.pandaSetUrl = `${this.pandaUrl}/set`;
     this.pandaGetStateUrl = `${this.pandaUrl}/get_state`;
-
+    this.pandaUpdateUrl = `${this.pandaUrl}/update_ele_data`;
     try {
       setTimeout(async () => {
         const response = await fetch(this.pandaGetStateUrl);
@@ -51,18 +52,19 @@ export class PandaPwrPlatformAccessory {
         this.accessory.addService(this.platform.Service.Battery, 'Panda Battery Sensor');
     this.batteryService.setCharacteristic(this.platform.Characteristic.Name, 'Panda Power Level')
       .setCharacteristic(this.platform.Characteristic.BatteryLevel, this.pandaPwrStates.Power)
-      .setCharacteristic(this.platform.Characteristic.ChargingState, this.platform.Characteristic.ChargingState.NOT_CHARGING)
+      .setCharacteristic(this.platform.Characteristic.ChargingState, this.pandaPwrStates.Power > 0 ?
+        this.platform.Characteristic.ChargingState.CHARGING : this.platform.Characteristic.ChargingState.NOT_CHARGING)
       .setCharacteristic(this.platform.Characteristic.StatusLowBattery,
         this.pandaPwrStates.Power < 1 ?
           this.platform.Characteristic.StatusLowBattery.BATTERY_LEVEL_LOW : this.platform.Characteristic.StatusLowBattery.BATTERY_LEVEL_NORMAL);
 
-    setInterval(async () => await this.getPandaData(this.accessory), this.accessory.context.device.interval * 1000);
+    setInterval(async () => await this.getPandaData(), this.accessory.context.device.interval * 1000);
   }
 
-  private async getPandaData(accessory: PlatformAccessory) {
+  private async getPandaData() {
     try {
       this.platform.log.debug('Getting PandaPwr state...');
-      const response = await fetch(`http://${accessory.context.device.ip}/update_ele_data`);
+      const response = await fetch(this.pandaUpdateUrl);
       const json = await response.json();
       this.pandaPwrStates.On = json.power !== 0;
       this.service.updateCharacteristic(this.platform.Characteristic.On, this.pandaPwrStates.On);
@@ -92,10 +94,8 @@ export class PandaPwrPlatformAccessory {
     }
 
     this.lastExecutionTime = currentTime;
-    const state = value as boolean ? 1 : 0;
-    this.pandaPwrStates.On = value as boolean;
-    this.service.updateCharacteristic(this.platform.Characteristic.On, this.pandaPwrStates.On);
-    this.platform.log.debug('Set Characteristic On ->', value);
+    const state = value as boolean;
+    this.platform.log.debug('Set Characteristic On ->', state);
     await this.sendPowerCommand(state);
   }
 
@@ -110,7 +110,7 @@ export class PandaPwrPlatformAccessory {
   /**
    * Function to send power command to Panda device
    */
-  private async sendPowerCommand(state: number): Promise<void> {
+  private async sendPowerCommand(state: boolean): Promise<void> {
     try {
       const response = await fetch(this.pandaSetUrl, {
         headers: {
@@ -118,16 +118,19 @@ export class PandaPwrPlatformAccessory {
           'content-type': 'text/plain;charset=UTF-8',
           'pragma': 'no-cache',
         },
-        body: `power=${state}`,
+        body: `power=${state ? 1 : 0}`,
         method: 'POST',
         mode: 'cors',
         credentials: 'omit',
       });
 
       if (!response.ok) {
-        this.pandaPwrStates.On = !this.pandaPwrStates.On;
+        // this.pandaPwrStates.On = !this.pandaPwrStates.On;
         this.platform.log.error('Failed to set characteristic', state);
+        return;
       }
+      this.pandaPwrStates.On = state;
+      this.service.updateCharacteristic(this.platform.Characteristic.On, this.pandaPwrStates.On);
       this.platform.log.debug('Set Characteristic On Succeeded', state);
     } catch (e) {
       this.platform.log.error(e as string);
