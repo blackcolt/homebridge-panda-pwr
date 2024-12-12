@@ -1,14 +1,15 @@
 import { CharacteristicValue, PlatformAccessory, Service } from 'homebridge';
+import { normalizePowerData, normalizeVoltageData } from './utils/utils';
 import type { PandaPwrPlatform } from './platform.js';
 
 export class PandaPwrPlatformAccessory {
-  private service: Service;
+  private readonly pandaGetStateUrl: string;
+  private readonly pandaSetUrl: string;
+  private lastExecutionTime: number;
+  private readonly pandaUrl: string;
   private voltageService: Service;
   private batteryService: Service;
-  private lastExecutionTime: number;
-  private pandaUrl: string;
-  private pandaGetStateUrl: string;
-  private pandaSetUrl: string;
+  private service: Service;
   private pandaPwrStates = {
     On: false,
     Voltage: 0.0001,
@@ -19,7 +20,6 @@ export class PandaPwrPlatformAccessory {
       private readonly platform: PandaPwrPlatform,
       private readonly accessory: PlatformAccessory,
   ) {
-    accessory.context.device.ip = '192.168.68.168';
     this.lastExecutionTime = 0;
     this.pandaUrl = `http://${accessory.context.device.ip}`;
     this.pandaSetUrl = `${this.pandaUrl}/set`;
@@ -40,17 +40,15 @@ export class PandaPwrPlatformAccessory {
     }
     this.service = this.accessory.getService(this.platform.Service.Switch) || this.accessory.addService(this.platform.Service.Switch);
     this.service.setCharacteristic(this.platform.Characteristic.Name, 'PandaPWR');
-    this.service.getCharacteristic(this.platform.Characteristic.On)
-      .onSet(this.setOn.bind(this))
-      .onGet(this.getOn.bind(this));
+    this.service.getCharacteristic(this.platform.Characteristic.On).onSet(this.setOn.bind(this)).onGet(this.getOn.bind(this));
 
     this.voltageService = this.accessory.getService(this.platform.Service.LightSensor) ||
-        this.accessory.addService(this.platform.Service.LightSensor, 'Voltage Sensor');
+        this.accessory.addService(this.platform.Service.LightSensor, 'Panda Voltage Sensor');
     this.voltageService.setCharacteristic(this.platform.Characteristic.Name, 'Panda Voltage')
       .setCharacteristic(this.platform.Characteristic.CurrentAmbientLightLevel, this.pandaPwrStates.Voltage);
 
     this.batteryService = this.accessory.getService(this.platform.Service.Battery) ||
-        this.accessory.addService(this.platform.Service.Battery, 'Battery Sensor');
+        this.accessory.addService(this.platform.Service.Battery, 'Panda Battery Sensor');
     this.batteryService.setCharacteristic(this.platform.Characteristic.Name, 'Panda Power Level')
       .setCharacteristic(this.platform.Characteristic.BatteryLevel, this.pandaPwrStates.Power)
       .setCharacteristic(this.platform.Characteristic.ChargingState, this.platform.Characteristic.ChargingState.NOT_CHARGING)
@@ -68,9 +66,9 @@ export class PandaPwrPlatformAccessory {
       const json = await response.json();
       this.pandaPwrStates.On = json.power !== 0;
       this.service.updateCharacteristic(this.platform.Characteristic.On, this.pandaPwrStates.On);
-      this.pandaPwrStates.Voltage = this.normalizeVoltageData(json.voltage || 0);
+      this.pandaPwrStates.Voltage = normalizeVoltageData(json.voltage || 0);
       this.voltageService.updateCharacteristic(this.platform.Characteristic.CurrentAmbientLightLevel, this.pandaPwrStates.Voltage);
-      this.pandaPwrStates.Power = this.normalizePowerData(json.power);  // Default to 100 if no value
+      this.pandaPwrStates.Power = normalizePowerData(json.power);
       this.batteryService.updateCharacteristic(this.platform.Characteristic.BatteryLevel, this.pandaPwrStates.Power);
       this.batteryService.updateCharacteristic(this.platform.Characteristic.ChargingState,
         this.pandaPwrStates.On ? this.platform.Characteristic.ChargingState.CHARGING : this.platform.Characteristic.ChargingState.NOT_CHARGING);
@@ -80,17 +78,6 @@ export class PandaPwrPlatformAccessory {
       this.platform.log.warn(e as string);
     }
   }
-
-  private normalizeVoltageData = (voltage: number)=>{
-    if (voltage > 100) {
-      return 100;
-    } else if(voltage === 0){
-      return 0.0001;
-    }
-    return voltage;
-  };
-
-  private normalizePowerData = (power: number)=> power >= 10 ? 100 : power * 10;
 
   /**
    * Handle "SET" requests from HomeKit
