@@ -54,9 +54,10 @@ export class PandaPwrPlatformAccessory {
       .setCharacteristic(this.platform.Characteristic.BatteryLevel, this.pandaPwrStates.Power)
       .setCharacteristic(this.platform.Characteristic.ChargingState, this.pandaPwrStates.Power > 0 ?
         this.platform.Characteristic.ChargingState.CHARGING : this.platform.Characteristic.ChargingState.NOT_CHARGING)
-      .setCharacteristic(this.platform.Characteristic.StatusLowBattery,
-        this.pandaPwrStates.Power < 1 ?
-          this.platform.Characteristic.StatusLowBattery.BATTERY_LEVEL_LOW : this.platform.Characteristic.StatusLowBattery.BATTERY_LEVEL_NORMAL);
+      .setCharacteristic(
+        this.platform.Characteristic.StatusLowBattery,
+        this.platform.Characteristic.StatusLowBattery.BATTERY_LEVEL_NORMAL,
+      );
 
     setInterval(async () => await this.getPandaData(), this.accessory.context.device.interval * 1000);
   }
