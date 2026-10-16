@@ -2,7 +2,7 @@
   "name": "homebridge-panda-pwr",
   "displayName": "Panda Pwr",
   "type": "module",
-  "version": "1.1.7",
+  "version": "1.1.8",
   "description": "This is a Homebridge plugin for Panda Pwr, it works with the Panda Pwr API to control your Panda Pwr devices.",
   "author": "Idan Magled <idanmagled@gmail.com> (https://github.com/blackcolt)",
   "license": "Apache-2.0",
@@ -36,8 +36,8 @@
   "main": "dist/index.js",
   "icon": "https://raw.githubusercontent.com/blackcolt/homebridge-panda-pwr/latest/assets/icon.png",
   "engines": {
-    "node": "^18.20.4 || ^20.18.0 || ^22.10.0",
-    "homebridge": "^1.8.0 || ^2.0.0-beta.0"
+    "node": "^18.20.4 || ^20.18.0 || ^22.10.0 || ^24.0.0",
+    "homebridge": "^1.8.0 || ^2.0.0"
   },
   "scripts": {
     "build": "rimraf ./dist && tsc",

@@ -2,6 +2,9 @@ import { CharacteristicValue, PlatformAccessory, Service } from 'homebridge';
 import { normalizePowerData, normalizeVoltageData } from './utils/utils.js';
 import type { PandaPwrPlatform } from './platform.js';
 
+const REQUEST_TIMEOUT_MS = 5000;
+const errorText = (e: unknown): string => (e instanceof Error ? `${e.message}${e.cause ? ` (${String(e.cause)})` : ''}` : String(e));
+
 export class PandaPwrPlatformAccessory {
   private readonly pandaGetStateUrl: string;
   private readonly pandaUpdateUrl: string;
@@ -26,19 +29,7 @@ export class PandaPwrPlatformAccessory {
     this.pandaSetUrl = `${this.pandaUrl}/set`;
     this.pandaGetStateUrl = `${this.pandaUrl}/get_state`;
     this.pandaUpdateUrl = `${this.pandaUrl}/update_ele_data`;
-    try {
-      setTimeout(async () => {
-        const response = await fetch(this.pandaGetStateUrl);
-        const json = await response.json();
-        this.accessory.getService(this.platform.Service.AccessoryInformation)!
-          .setCharacteristic(this.platform.Characteristic.Manufacturer, 'Panda')
-          .setCharacteristic(this.platform.Characteristic.Model, 'BlackColtPandaPwr')
-          .setCharacteristic(this.platform.Characteristic.SerialNumber, json.ap_pwd)
-          .setCharacteristic(this.platform.Characteristic.Version, json.fw_version);
-      }, 500);
-    } catch (e) {
-      this.platform.log.warn(e as string);
-    }
+    setTimeout(() => this.loadDeviceInfo(), 500);
     this.service = this.accessory.getService(this.platform.Service.Switch) || this.accessory.addService(this.platform.Service.Switch);
     this.service.setCharacteristic(this.platform.Characteristic.Name, 'PandaPWR');
     this.service.getCharacteristic(this.platform.Characteristic.On).onSet(this.setOn.bind(this)).onGet(this.getOn.bind(this));
@@ -59,13 +50,33 @@ export class PandaPwrPlatformAccessory {
         this.platform.Characteristic.StatusLowBattery.BATTERY_LEVEL_NORMAL,
       );
 
-    setInterval(async () => await this.getPandaData(), this.accessory.context.device.interval * 1000);
+    setInterval(() => void this.getPandaData(), this.accessory.context.device.interval * 1000);
+  }
+
+  /**
+   * Fill the HomeKit accessory information. Runs once at start-up; a device that
+   * is offline must not crash the child bridge (fetch rejects with "fetch failed").
+   */
+  private async loadDeviceInfo() {
+    try {
+      const response = await fetch(this.pandaGetStateUrl, { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+      const json = await response.json();
+      this.accessory.getService(this.platform.Service.AccessoryInformation)!
+        .setCharacteristic(this.platform.Characteristic.Manufacturer, 'Panda')
+        .setCharacteristic(this.platform.Characteristic.Model, 'BlackColtPandaPwr')
+        // Do not use json.ap_pwd here: that is the device's Wi-Fi AP password.
+        .setCharacteristic(this.platform.Characteristic.SerialNumber, String(json.ap_ssid || this.accessory.context.device.ip))
+        .setCharacteristic(this.platform.Characteristic.FirmwareRevision, String(json.fw_version || '0'));
+    } catch (e) {
+      this.platform.log.warn(`PandaPwr ${this.pandaUrl} not reachable for device info (${errorText(e)}), retrying in 60s`);
+      setTimeout(() => this.loadDeviceInfo(), 60_000);
+    }
   }
 
   private async getPandaData() {
     try {
       this.platform.log.debug('Getting PandaPwr state...');
-      const response = await fetch(this.pandaUpdateUrl);
+      const response = await fetch(this.pandaUpdateUrl, { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
       const json = await response.json();
       this.pandaPwrStates.On = json.power !== 0;
       this.service.updateCharacteristic(this.platform.Characteristic.On, this.pandaPwrStates.On);
@@ -78,7 +89,7 @@ export class PandaPwrPlatformAccessory {
       this.platform.log.debug('Updated PandaPwr state, power:',
         this.pandaPwrStates.On, 'voltage:', this.pandaPwrStates.Voltage, 'battery level:', this.pandaPwrStates.Power);
     } catch (e) {
-      this.platform.log.warn(e as string);
+      this.platform.log.warn(`PandaPwr ${this.pandaUrl} poll failed: ${errorText(e)}`);
     }
   }
 
@@ -123,6 +134,7 @@ export class PandaPwrPlatformAccessory {
         method: 'POST',
         mode: 'cors',
         credentials: 'omit',
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       });
 
       if (!response.ok) {
@@ -134,7 +146,7 @@ export class PandaPwrPlatformAccessory {
       this.service.updateCharacteristic(this.platform.Characteristic.On, this.pandaPwrStates.On);
       this.platform.log.debug('Set Characteristic On Succeeded', state);
     } catch (e) {
-      this.platform.log.error(e as string);
+      this.platform.log.error(`PandaPwr ${this.pandaUrl} set power failed: ${errorText(e)}`);
     }
   }
 }
